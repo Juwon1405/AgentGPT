@@ -4,8 +4,27 @@ import { printTitle } from "./helpers.js";
 import { doesEnvFileExist, generateEnv, testEnvFile } from "./envGenerator.js";
 import { newEnvQuestions } from "./questions/newEnvQuestions.js";
 import { existingEnvQuestions } from "./questions/existingEnvQuestions.js";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import chalk from "chalk";
+
+const resolveDockerComposeCommand = () => {
+  const hasDockerComposeV1 = spawnSync("docker-compose", ["version"], {
+    stdio: "ignore",
+  }).status === 0;
+
+  if (hasDockerComposeV1) {
+    return { command: "docker-compose", args: ["up", "--build"] };
+  }
+
+  const hasDockerComposeV2 =
+    spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status === 0;
+
+  if (hasDockerComposeV2) {
+    return { command: "docker", args: ["compose", "up", "--build"] };
+  }
+
+  return null;
+};
 
 const handleExistingEnv = () => {
   console.log(chalk.yellow("Existing ./next/env file found. Validating..."));
@@ -33,8 +52,27 @@ const handleNewEnv = () => {
 
 const handleRunOption = (runOption) => {
   if (runOption === "docker-compose") {
-    const dockerComposeUp = spawn("docker-compose", ["up", "--build"], {
-      stdio: "inherit",
+    const dockerComposeCommand = resolveDockerComposeCommand();
+
+    if (!dockerComposeCommand) {
+      console.log(
+        chalk.red(
+          "Docker Compose was not found. Install Docker Desktop and ensure either `docker-compose` or `docker compose` is available."
+        )
+      );
+      return;
+    }
+
+    const dockerComposeUp = spawn(
+      dockerComposeCommand.command,
+      dockerComposeCommand.args,
+      {
+        stdio: "inherit",
+      }
+    );
+
+    dockerComposeUp.on("error", (error) => {
+      console.log(chalk.red(`Failed to run Docker Compose: ${error.message}`));
     });
   }
 
